@@ -4,10 +4,10 @@
 This project involves the development of quantitative forecasting models to analyze and predict the stock price trajectory of BlackRock Inc. (NYSE: BLK). By conducting a comprehensive 10-year longitudinal analysis of historical market data, the project aims to identify underlying structural components—such as deterministic trends and subtle seasonality—that drive asset valuation. The end goal is to provide a robust time series framework that compares deterministic, smoothing, and probabilistic algorithms to accurately forecast future stock prices and evaluate market risk.
 
 ## Team Members
-* Janna Freund (ETU20250782)
-* Tetiana Fedotova (ETU20250781)
-* Mridul Jain (ETU20250784)
-* Kezia Christy Wibowo (ETU20240232)
+* [Janna Freund](https://github.com/jannafr) (ETU20250782)
+* [Tetiana Fedotova](https://github.com/mesopotania) (ETU20250781)
+* [Mridul Jain](https://github.com/MridulJain1101) (ETU20250784)
+* [Kezia Wibowo](https://github.com/kezia-ch) (ETU20240232)
 
 ## About the Dataset
 The financial data utilized for this project was sourced directly from **Yahoo Finance** using the `quantmod` package in R. 
