@@ -1,0 +1,334 @@
+# Black Rock Stock Price Analysis of Past 10y
+
+## Team members:
+
+-   Janna Freund (ETU20250782)
+-   Tetiana Fedotova (ETU20250781)
+-   Mridul Jain (ETU20250784)
+-   Kezia Christy Wibowo (ETU20240232)
+
+#### Github Repository:<https://github.com/MridulJain1101/Black-Rock-Stock-Price-Prediction-using-Historical-Data-of-Past-10-Years>
+
+## Step 1: Load the important packages and call libraries
+
+```{r}
+install.packages("quantmod")
+```
+
+```{r}
+library(quantmod)
+library(lubridate)
+library(dplyr)
+library(forecast)
+library(Metrics)
+library(ggplot2)
+library(TTR)
+library(urca)
+library(lmtest)
+```
+
+## Step 2: Load the Black Rock historical data
+
+```{r}
+# Define the start date (10 years ago from 2026-02-28)
+start_date = as.Date("2016-03-01")
+end_date = as.Date("2026-02-28")
+
+# Fetch the data from Yahoo Finance
+options(download.file.method = "libcurl")
+getSymbols("BLK", src = "yahoo", from = start_date, to = end_date)
+
+# View the first few rows
+head(BLK)
+tail(BLK)
+```
+
+## Step 3: Naming the target column
+
+```{r}
+blk_adj_close = Ad(BLK)
+blk_adj_close
+```
+
+## Step 4: Checking missing values
+
+```{r}
+colSums(is.na(BLK))
+```
+
+## Step 5: Creating a data frame out of the current xts object and renaming the columns
+
+```{r}
+blk_clean = as.data.frame(BLK)
+blk_clean$Date = as.Date(rownames(blk_clean))
+rownames(blk_clean) = NULL
+
+colnames(blk_clean) = c("Open", "High", "Low", "Close", "Volume", "Adj.Close", "Date")
+```
+
+## Step 6: Data transformation to monthly ts
+
+```{r}
+blk_monthly = blk_clean %>%
+  mutate(YearMonth = floor_date(Date, "month")) %>%
+  group_by(YearMonth) %>%
+  summarise(Adj.Close = mean(Adj.Close), .groups = "drop")
+blk_ts = ts(blk_monthly$Adj.Close,
+             start     = c(2016, 3),
+             frequency = 12)
+class(blk_ts)
+```
+
+-   Metric Selection: The Adjusted Close price was selected as the target variable for this 10-year longitudinal analysis because it accurately reflects the asset's true value after accounting for corporate actions, such as dividend payouts and stock splits.
+-   Aggregation: The data was aggregated from a daily to a monthly frequency to reduce microscopic market noise and high-frequency volatility, thereby enhancing the stability and reliability of the time series forecasting models.
+
+## Step 7: Visual inspection to check trend and seasonality
+
+```{r}
+plot(blk_ts, type = "l", col = "blue")
+```
+
+-   Visual Diagnostics: Initial visual inspection of the time series reveals a pronounced deterministic upward trend over the 10-year period.
+-   Next step is to plot for first 3 years to check seasonality
+
+```{r}
+plot(blk_ts[1:36], type = "l", col = "blue")
+```
+
+-   Seasonality Check: By isolating the first 36 months of data (3 years), we observe no strict, recurring seasonal patterns. Consequently, while Simple Exponential Smoothing (SES) may underperform due to the trend, Holt’s Linear Trend method and Autoregressive Integrated Moving Average (ARIMA) models represent theoretically sound approaches for this dataset.
+
+## Step 8: Splitting the data set into train and test data
+
+```{r}
+n = nrow(blk_ts)
+train_blk = window (blk_ts, end = c(2024,2))
+test_blk = window (blk_ts, start = c(2024,3))
+h = length (test_blk) #no of forecasts we need to generate
+```
+
+## Step 9: Moving Average Model with 3,6 and 12 months forecast
+
+```{r}
+ma3_blk  = SMA(train_blk, n = 3)
+ma6_blk  = SMA(train_blk, n = 6)
+ma12_blk = SMA(train_blk, n = 12)
+
+pred_ma3_blk  = ts(rep(tail(na.omit(ma3_blk),  1), h), start = start(test_blk), frequency = 12)
+pred_ma6_blk  = ts(rep(tail(na.omit(ma6_blk),  1), h), start = start(test_blk), frequency = 12)
+pred_ma12_blk = ts(rep(tail(na.omit(ma12_blk), 1), h), start = start(test_blk), frequency = 12)
+
+mape_ma3_blk  = mape(test_blk, pred_ma3_blk)
+mape_ma6_blk  = mape(test_blk, pred_ma6_blk)
+mape_ma12_blk = mape(test_blk, pred_ma12_blk)
+
+mape_ma3_blk
+mape_ma6_blk
+mape_ma12_blk
+```
+
+-   Choice of error metric: We use MAPE as the key error metric we compute for all models. In the end, we are comparing all MAPE metrics in order to find out the best forecasting model. MAPE was selected as the primary evaluation metric because its scale-independence ensures a fair comparison across all models throughout a 10-year period during which BLK's price tripled — unlike MAE or RMSE whose absolute USD values are directly influenced by the price level at the time of forecasting
+
+## Step 10: Exponential smoothing
+
+-   Model Assumptions and Hypotheses:In applying exponential smoothing techniques, we construct competing hypotheses regarding the underlying structural components of the Black Rock stock price:
+
+    -   $H_0$: The time series contains only a fundamental level with random noise, exhibiting no significant trend or seasonal components (Simple Exponential Smoothing is optimal).
+    -   $H_A$: The time series possesses a definitive structural trend and/or seasonal variation (Holt’s Linear or Holt-Winters models will yield significantly lower forecast errors).
+
+    ```{r}
+    #SES
+    pred_ses_blk = ses(train_blk, h = h)
+    mape_ses_blk = mape(test_blk, pred_ses_blk$mean)
+    mape_ses_blk
+    summary(pred_ses_blk)
+    autoplot(pred_ses_blk) + 
+      ylim(min(train_blk), max(pred_ses_blk$upper))
+    ```
+
+```{r}
+#HOLT
+pred_holt_blk = holt(train_blk, h = h)
+mape_holt_blk = mape(test_blk, pred_holt_blk$mean)
+mape_holt_blk
+autoplot(pred_holt_blk) + 
+  ylim(min(train_blk), max(pred_holt_blk$upper))
+```
+
+```{r}
+#Add Holt
+pred_add_blk = hw(train_blk, h = h, frequency = 12, seasonal = "additive")
+mape_add_blk = mape(test_blk, pred_add_blk$mean)
+mape_add_blk
+summary(pred_add_blk)
+autoplot(pred_add_blk) + 
+  ylim(min(train_blk), max(pred_add_blk$upper))
+```
+
+```{r}
+#Mult Holt
+pred_mult_blk = hw(train_blk, h = h, frequency = 12, seasonal = "multiplicative")
+mape_mult_blk = mape(test_blk, pred_mult_blk$mean)
+mape_mult_blk
+summary(pred_mult_blk)
+autoplot(pred_mult_blk) + 
+  ylim(min(train_blk), max(pred_mult_blk$upper))
+```
+
+```{r}
+#Overview table with MAPE as the comparison metric
+comp_table = data.frame( Method = c("SES","HOLT","ADD_HW","MULT_HW"),
+                         MAPE = c(mape_ses_blk,mape_holt_blk,mape_add_blk,mape_mult_blk))
+comp_table
+attach (comp_table)
+
+print("The best forecasting method for our data is: ")
+c("SES","HOLT","ADD_HW","MULT_HW","MA3","MA6","MA12")[which.min(c(mape_ses_blk,mape_holt_blk,mape_add_blk,mape_mult_blk,mape_ma3_blk, mape_ma6_blk, mape_ma12_blk))]
+
+```
+
+-   Results & Interpretation:
+
+    -   By comparing the Mean Absolute Percentage Error (MAPE) across the four models, the Multiplicative Holt-Winters (MULT_HW) model minimizes the loss function. This suggests that while visual inspection did not reveal obvious seasonality, the algorithmic breakdown detects subtle seasonal variations that grow proportionately with the overall level of the stock price. We reject $H_0$ in favor of models that account for trend and multiplicative seasonality.
+
+## Step 11: Performing Linear Regression
+
+```{r}
+# Define 
+n = length(blk_ts)
+train_end = n - h
+test_start = train_end + 1
+
+tt = 1:length(train_blk)
+tt_test = (length(train_blk)+1):n
+
+fit_lm = lm(train_blk ~ tt)
+summary(fit_lm)
+```
+
+```{r}
+# Predict on test data
+pred_linear = predict(fit_lm, newdata = data.frame(tt = tt_test))
+pred_linear
+
+mape_linear = mape(test_blk, pred_linear)
+mape_linear
+
+print("The best forecasting method for our data is: ")
+c("SES","HOLT","ADD_HW","MULT_HW","Linear Trend")[which.min(c(mape_ses_blk,mape_holt_blk,mape_add_blk,mape_mult_blk, mape_linear))]
+
+```
+
+-   After applying Linear Regression, the comparison table confirms that so far, Mult_HW is still the best model to predict our data. Next, we will fit the best ARIMA model.
+
+## Step 12: Creating Arima model
+
+```{r}
+# Stationarity check 
+ndiffs(blk_ts)   # how many standard differences needed -> 1
+nsdiffs(blk_ts)  # how many seasonal differences needed -> no seasonal differences needed
+
+summary(ur.kpss(blk_ts))
+```
+
+-   Stationarity Diagnostics (KPSS Test): To formally test for stationarity, we apply the Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test.
+
+    -   $H_0$: The time series is level or trend stationary.
+    -   $H_A$: The time series possesses a unit root (is non-stationary).
+    -   Result: The calculated KPSS test statistic is $2.1444$, which significantly exceeds the $5\%$ critical value of $0.463$. Therefore, we reject the null hypothesis of stationarity on the significance level of 0.05%. The data must be differenced to stabilize the mean.
+
+```{r}
+# Transformation and differentiating
+lblk = log(blk_ts)  # log transformation to stabilize variance
+autoplot(lblk)
+```
+
+```{r}
+dlblk = diff(lblk)
+autoplot(dlblk)
+```
+
+```{r}
+summary(ur.kpss(dlblk))   # Confirm stationarity
+```
+
+-   Post-Transformation Diagnostics:
+
+    -   After applying a logarithmic transformation (to stabilize variance) and a first-order difference (to eliminate the trend), the new KPSS test statistic is $0.0488$. Because this is less than the $5\%$ critical value ($0.463$), we fail to reject $H_0$. The transformed series (dlblk) is now strictly stationary and suitable for ARIMA modeling.
+
+```{r}
+# ACF and PACF 
+acf(dlblk)
+pacf(dlblk)
+```
+
+-   ACF (Autocorrelation Function): measures how correlated the series is with its own past values
+
+-   x-axis = lag in years (0.5 = 6 months, 1.0 = 12 months)
+
+-   y-axis = strength of correlation (-1 to 1)
+
+-   blue dashed lines = significance boundary
+
+-   result: all spikes fall within blue lines after lag 0 -\> no significant autocorrelation detected at any lag -\> suggests MA order q = 0
+
+-   PACF (Partial Autocorrelation Function): measures direct correlation with past values only, removing indirect effects of lags in between
+
+-   result: all spikes fall within blue lines -\> no significant partial autocorrelation detected -\> suggests AR order p = 0
+
+## Step 13: Fit best ARIMA Model
+
+```{r}
+fit = auto.arima(train_blk)
+summary(fit)
+coeftest(fit)
+```
+
+-   The auto.arima() algorithm identified an ARIMA$(1,0,0)[12]$ model with drift as the optimal fit for the training data.
+-   sar1: This is the only estimated parameter — the seasonal AR coefficient. The value 0.2022 is weak — on a scale of -1 to 1, values close to 0 mean very little seasonal influence. This confirms what we saw visually: BLK has no strong seasonal pattern.
+-   the model is essentially a random walk (0,1,0) — meaning it mostly just says "tomorrow will look like today".
+-   We test the statistical significance of the estimated coefficients ($H_0$: The coefficient is equal to zero).
+-   Result: The p-values for the coefficients are $0.14258$ and $0.07449$. Because both exceed the standard alpha level of $0.05$, we fail to reject the null hypothesis. This indicates that the specific autoregressive parameters may lack strong statistical significance, potentially leading to a wider confidence interval in our forecasts.
+
+## Step 14:Forecast and Evaluate
+
+```{r}
+pred = forecast(fit, h = h)
+autoplot(pred)
+mape_arima = mape(as.numeric(test_blk), as.numeric(pred$mean))
+mape_arima
+```
+
+-   Error Metric Interpretations: MAPE ($0.183$): On average, the ARIMA model's forecasts deviate from the actual BlackRock stock prices by $18.3\%$.
+
+BLK's price tripled over the 10-year period (\~\$250 to \~\$1100), absolute metrics like MAE/RMSE would favour models forecasting lower price periods, MAPE ensures all models are judged on the same relative scale.
+
+## Step 15: Final Model Comparison
+
+```{r}
+comp_table_final = data.frame(
+  Method = c("MA3","MA6","MA12","SES","HOLT","ADD_HW","MULT_HW","ARIMA","Linear"),
+  MAPE   = c(mape_ma3_blk, mape_ma6_blk, mape_ma12_blk,
+             mape_ses_blk, mape_holt_blk, mape_add_blk,
+             mape_mult_blk, mape_arima, mape_linear))
+
+comp_table_final
+
+print("The best forecasting method is:")
+comp_table_final$Method[which.min(comp_table_final$MAPE)]
+```
+
+-   Final Model Selection and Inference:
+
+    -   Conclusion: After evaluating deterministic (Moving Average, Linear Trend), smoothing (Exponential), and probabilistic (ARIMA) models, the Multiplicative Holt-Winters (MULT_HW) model achieves the lowest MAPE on the out-of-sample test data.
+
+    -   Why MULT_HW wins: It explicitly models both the long-term upward trend and subtle multiplicative seasonality — where price volatility grows proportionally with the stock's level.
+
+    -   Why ARIMA underperforms: The identified model ARIMA(0,1,0)(1,0,0)[12] behaves essentially as a random walk with a borderline insignificant seasonal parameter (p = 0.052), resulting in poor generalization from training (MAPE \~5%) to test data (MAPE \~18%).
+
+    -   Moving Average: Produces flat forecasts by repeating the last known average — useful as a baseline benchmark but structurally unable to follow BLK's upward trend.
+
+    -   Linear Regression: Confirms a statistically significant trend of \~5.17 USD/month (R² = 0.74) but is too rigid to capture non-linear price accelerations.
+
+    -   Limitation: Stock prices are inherently difficult to forecast due to external shocks (e.g. COVID-19 crash visible in the 2020 data, interest rate decisions)
+
+    -   Final Market Inference: The superior performance of the MULT_HW model indicates that BlackRock's stock price trajectory is best defined by an ongoing structural upward trend compounded by proportional cyclical fluctuations. Based on our optimal model's predictions, the forecasted market price maintains a bullish trajectory, though investors should account for the expanding prediction intervals which represent increasing market uncertainty over a longer time horizon.
