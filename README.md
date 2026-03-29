@@ -1,7 +1,7 @@
 # BlackRock (BLK) Stock Price Forecasting: A 10-Year Time Series Analysis
 
 ## About the Project
-This project involves the development of quantitative forecasting models to analyze and predict the stock price trajectory of BlackRock Inc. (NYSE: BLK). By conducting a comprehensive 10-year longitudinal analysis of historical market data, the project aims to identify underlying structural components—such as deterministic trends and subtle seasonality—that drive asset valuation. The end goal is to provide a robust time series framework that compares deterministic, smoothing, and probabilistic algorithms to accurately forecast future stock prices and evaluate market risk.
+This project involves the development of quantitative forecasting models to analyze and predict the stock price trajectory of BlackRock Inc. (NYSE: BLK). By conducting a comprehensive 10-year longitudinal analysis of historical market data, the project aims to identify underlying structural components, such as deterministic trends and subtle seasonality that drive asset valuation. The end goal is to provide a robust time series framework that compares deterministic, smoothing, and probabilistic algorithms to accurately forecast future stock prices and evaluate market risk.
 
 ## Team Members
 * [Janna Freund](https://github.com/jannafr) (ETU20250782)
